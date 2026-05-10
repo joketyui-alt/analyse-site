@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Site Analyzer — Reverse Engineer Any Website</title>
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --surface: #12121a;
+      --surface2: #1a1a25;
+      --border: #2a2a3a;
+      --text: #e4e4ef;
+      --text-dim: #8888a0;
+      --accent: #6c5ce7;
+      --accent-light: #a29bfe;
+      --green: #00cec9;
+      --orange: #fdcb6e;
+      --pink: #fd79a8;
+      --blue: #74b9ff;
+      --red: #ff7675;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    header {
+      padding: 60px 0 40px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent-light), var(--green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+      letter-spacing: -1px;
+    }
+
+    header p {
+      color: var(--text-dim);
+      font-size: 1.1rem;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .search-box {
+      display: flex;
+      gap: 12px;
+      max-width: 650px;
+      margin: 30px auto 50px;
+    }
+
+    .search-box input {
+      flex: 1;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 14px;
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.3s;
+    }
+
+    .search-box input:focus {
+      border-color: var(--accent);
+    }
+
+    .search-box input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .search-box button {
+      padding: 16px 32px;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 14px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s;
+      white-space: nowrap;
+    }
+
+    .search-box button:hover {
+      background: var(--accent-light);
+      transform: translateY(-1px);
+    }
+
+    .search-box button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+    }
+
+    .loading.active { display: block; }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 20px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading p {
+      color: var(--text-dim);
+      font-size: 1.05rem;
+    }
+
+    .results { display: none; padding-bottom: 80px; }
+    .results.active { display: block; }
+
+    .result-header {
+      text-align: center;
+      margin-bottom: 40px;
+      padding: 30px;
+      background: var(--surface);
+      border-radius: 16px;
+      border: 1px solid var(--border);
+    }
+
+    .result-header h2 {
+      font-size: 1.5rem;
+      margin-bottom: 8px;
+      color: var(--accent-light);
+    }
+
+    .result-header .url {
+      color: var(--text-dim);
+      font-size: 0.95rem;
+      word-break: break-all;
+    }
+
+    .result-header .url a {
+      color: var(--green);
+      text-decoration: none;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 20px;
+    }
+
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      overflow: hidden;
+      transition: border-color 0.3s;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+
+    .card-header .icon { font-size: 1.3rem; }
+    .card-header h3 { font-size: 1rem; font-weight: 600; color: var(--text); }
+
+    .card-body { padding: 18px 20px; }
+
+    .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+      color: var(--text);
+      transition: all 0.2s;
+    }
+
+    .tag:hover { border-color: var(--accent); }
+    .tag.accent { border-color: var(--accent); color: var(--accent-light); }
+    .tag.green { border-color: var(--green); color: var(--green); }
+    .tag.orange { border-color: var(--orange); color: var(--orange); }
+    .tag.pink { border-color: var(--pink); color: var(--pink); }
+    .tag.blue { border-color: var(--blue); color: var(--blue); }
+
+    .color-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+
+    .color-swatch {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      transition: transform 0.2s;
+      position: relative;
+    }
+
+    .color-swatch:hover { transform: scale(1.15); z-index: 2; }
+
+    .color-swatch::after {
+      content: attr(data-color);
+      position: absolute;
+      bottom: -24px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .color-swatch:hover::after { opacity: 1; }
+
+    .list-item {
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      font-size: 0.9rem;
+    }
+
+    .list-item:last-child { border-bottom: none; }
+    .list-item .label { color: var(--text-dim); font-size: 0.8rem; margin-bottom: 2px; }
+    .list-item .value { color: var(--text); word-break: break-word; }
+
+    .keyframe-item {
+      background: var(--surface2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .keyframe-name { font-weight: 600; color: var(--orange); font-size: 0.9rem; }
+    .keyframe-transforms { font-size: 0.8rem; color: var(--text-dim); margin-top: 4px; font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 6px 0;
+      font-size: 0.9rem;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+
+    .stat-row:last-child { border-bottom: none; }
+    .stat-label { color: var(--text-dim); }
+    .stat-value { color: var(--text); font-weight: 500; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .badge.high { background: rgba(0,206,201,0.15); color: var(--green); }
+    .badge.medium { background: rgba(253,203,110,0.15); color: var(--orange); }
+
+    .scroll-list { max-height: 200px; overflow-y: auto; padding-right: 8px; }
+    .scroll-list::-webkit-scrollbar { width: 4px; }
+    .scroll-list::-webkit-scrollbar-track { background: transparent; }
+    .scroll-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .error {
+      display: none;
+      text-align: center;
+      padding: 40px;
+      background: rgba(255,118,117,0.1);
+      border: 1px solid var(--red);
+      border-radius: 14px;
+      margin-top: 20px;
+      color: var(--red);
+    }
+
+    .error.active { display: block; }
+
+    footer {
+      text-align: center;
+      padding: 40px 0;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🔍 Site Analyzer</h1>
+      <p>Enter any website URL and discover everything about how it's built — fonts, animations, colors, frameworks, and more.</p>
+    </header>
+
+    <div class="search-box">
+      <input type="text" id="urlInput" placeholder="Enter website URL (e.g. stripe.com)" autocomplete="off" />
+      <button id="analyzeBtn" onclick="analyze()">Analyze</button>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Analyzing website... This may take a few seconds.</p>
+    </div>
+
+    <div class="error" id="error"></div>
+
+    <div class="results" id="results">
+      <div class="result-header">
+        <h2 id="siteTitle"></h2>
+        <div class="url"><a id="siteUrl" href="#" target="_blank"></a></div>
+      </div>
+
+      <div class="grid" id="resultsGrid"></div>
+    </div>
+  </div>
+
+  <footer>Built with ❤️ — Site Analyzer</footer>
+
+  <script>
+    // Always point to the local server
+    var API_URL = 'http://localhost:3000/api/analyze';
+
+    var urlInput = document.getElementById('urlInput');
+    var analyzeBtn = document.getElementById('analyzeBtn');
+    var loading = document.getElementById('loading');
+    var errorEl = document.getElementById('error');
+    var results = document.getElementById('results');
+    var resultsGrid = document.getElementById('resultsGrid');
+    var siteTitle = document.getElementById('siteTitle');
+    var siteUrl = document.getElementById('siteUrl');
+
+    urlInput.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') analyze();
+    });
+
+    function analyze() {
+      var url = urlInput.value.trim();
+      if (!url) return;
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = 'Analyzing...';
+      loading.classList.add('active');
+      errorEl.classList.remove('active');
+      results.classList.remove('active');
+      resultsGrid.innerHTML = '';
+
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', API_URL, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.timeout = 30000;
+
+      xhr.onload = function() {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            displayResults(data);
+          } catch(e) {
+            showError('Failed to parse response: ' + e.message);
+          }
+        } else {
+          showError('Server error: HTTP ' + xhr.status);
+        }
+        resetBtn();
+      };
+
+      xhr.onerror = function() {
+        showError('Network error: Could not connect to server at ' + API_URL + '. Make sure the server is running.');
+        resetBtn();
+      };
+
+      xhr.ontimeout = function() {
+        showError('Request timed out. The website may be slow to respond.');
+        resetBtn();
+      };
+
+      xhr.send(JSON.stringify({ url: url }));
+    }
+
+    function showError(msg) {
+      errorEl.textContent = '❌ ' + msg;
+      errorEl.classList.add('active');
+    }
+
+    function resetBtn() {
+      analyzeBtn.disabled = false;
+      analyzeBtn.textContent = 'Analyze';
+      loading.classList.remove('active');
+    }
+
+    function displayResults(data) {
+      siteTitle.textContent = data.title || 'Untitled';
+      siteUrl.href = data.url;
+      siteUrl.textContent = data.url;
+
+      resultsGrid.innerHTML = '';
+
+      addCard('🔤', 'Fonts', buildFontsHTML(data.fonts));
+      addCard('🎨', 'Color Palette', buildColorsHTML(data.colors));
+
+      if (data.animations.totalAnimations > 0 || data.animations.keyframes.length > 0) {
+        addCard('✨', 'Animations', buildAnimationsHTML(data.animations));
+      }
+
+      if (data.transitions.length > 0) {
+        addCard('🔄', 'Transitions', buildTransitionsHTML(data.transitions));
+      }
+
+      addCard('⚙️', 'Frameworks & Libraries', buildFrameworksHTML(data.frameworks));
+      addCard('🛠️', 'Tech Stack', buildTechStackHTML(data.techStack));
+      addCard('📐', 'Layout', buildLayoutHTML(data.layout));
+      addCard('🏗️', 'Page Structure', buildStructureHTML(data.structure));
+      addCard('🖼️', 'Images & Media', buildImagesHTML(data.images));
+      addCard('📱', 'Responsiveness', buildResponsiveHTML(data.responsiveness));
+      addCard('🔷', 'Icons', buildIconsHTML(data.icons));
+
+      if (data.shadows.length > 0) {
+        addCard('🌑', 'Shadows', buildShadowsHTML(data.shadows));
+      }
+
+      if (data.gradients.length > 0) {
+        addCard('🌈', 'Gradients', buildGradientsHTML(data.gradients));
+      }
+
+      addCard('📋', 'Meta Information', buildMetaHTML(data.meta));
+
+      results.classList.add('active');
+    }
+
+    function addCard(icon, title, bodyHTML) {
+      var card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = '<div class="card-header"><span class="icon">' + icon + '</span><h3>' + title + '</h3></div><div class="card-body">' + bodyHTML + '</div>';
+      resultsGrid.appendChild(card);
+    }
+
+    function buildFontsHTML(fonts) {
+      var html = '<div class="scroll-list">';
+      fonts.families.forEach(function(f) {
+        html += '<div class="list-item"><div class="value" style="font-family:\'' + escapeHtml(f.name) + '\',sans-serif">' + escapeHtml(f.name) + '</div><div class="label">' + escapeHtml(f.source) + (f.url ? ' · <a href="' + escapeHtml(f.url) + '" target="_blank" style="color:var(--blue)">view</a>' : '') + '</div></div>';
+      });
+      html += '</div>';
+      if (fonts.sizesUsed.length > 0) {
+        html += '<div style="margin-top:12px"><div class="label">Font sizes used:</div><div class="tags" style="margin-top:6px">';
+        fonts.sizesUsed.slice(0, 15).forEach(function(s) { html += '<span class="tag">' + escapeHtml(s) + '</span>'; });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function buildColorsHTML(colors) {
+      if (colors.length === 0) return '<p style="color:var(--text-dim)">No colors detected</p>';
+      var html = '<div class="color-grid">';
+      colors.forEach(function(c) { html += '<div class="color-swatch" style="background:' + c + '" data-color="' + escapeHtml(c) + '" title="' + escapeHtml(c) + '"></div>'; });
+      html += '</div><div style="margin-top:12px;font-size:0.8rem;color:var(--text-dim)">' + colors.length + ' unique colors detected</div>';
+      return html;
+    }
+
+    function buildAnimationsHTML(animations) {
+      var html = '';
+      if (animations.keyframes.length > 0) {
+        html += '<div class="scroll-list">';
+        animations.keyframes.forEach(function(k) {
+          html += '<div class="keyframe-item"><div class="keyframe-name">@keyframes ' + escapeHtml(k.name) + '</div><div class="keyframe-transforms">' + escapeHtml(k.transforms.join(' → ')) + '</div></div>';
+        });
+        html += '</div>';
+      }
+      if (animations.animationNames.length > 0) {
+        html += '<div style="margin-top:10px"><div class="label">Applied animations:</div><div class="tags" style="margin-top:6px">';
+        animations.animationNames.forEach(function(n) { html += '<span class="tag orange">' + escapeHtml(n) + '</span>'; });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function buildTransitionsHTML(transitions) {
+      var html = '<div class="scroll-list">';
+      transitions.forEach(function(t) { html += '<div class="list-item"><div class="value" style="font-family:monospace;font-size:0.82rem">' + escapeHtml(t) + '</div></div>'; });
+      html += '</div>';
+      return html;
+    }
+
+    function buildFrameworksHTML(frameworks) {
+      var html = '<div class="tags">';
+      frameworks.forEach(function(f) {
+        var cls = f.confidence === 'high' ? 'green' : f.confidence === 'medium' ? 'orange' : '';
+        html += '<span class="tag ' + cls + '">' + escapeHtml(f.name) + (f.confidence !== 'N/A' ? ' <span class="badge ' + f.confidence + '">' + f.confidence + '</span>' : '') + '</span>';
+      });
+      html += '</div>';
+      var withEvidence = frameworks.filter(function(f) { return f.evidence; });
+      if (withEvidence.length > 0) {
+        html += '<div style="margin-top:10px">';
+        withEvidence.forEach(function(f) { html += '<div class="list-item"><div class="label">' + escapeHtml(f.name) + '</div><div class="value" style="font-size:0.82rem">' + escapeHtml(f.evidence) + '</div></div>'; });
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function buildTechStackHTML(stack) {
+      var html = '<div class="tags">';
+      stack.forEach(function(s) { html += '<span class="tag blue">' + escapeHtml(s) + '</span>'; });
+      html += '</div>';
+      return html;
+    }
+
+    function buildLayoutHTML(layout) {
+      var html = '<div class="stat-row"><span class="stat-label">CSS Grid</span><span class="stat-value">' + (Array.isArray(layout.cssGrid) ? layout.cssGrid.join(', ') : layout.cssGrid) + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Flexbox</span><span class="stat-value">' + layout.flexbox + '</span></div>';
+      if (layout.positioning.length > 0) html += '<div class="stat-row"><span class="stat-label">Positioning</span><span class="stat-value">' + layout.positioning.join(', ') + '</span></div>';
+      if (layout.maxWidths.length > 0) {
+        html += '<div style="margin-top:8px"><div class="label">Max widths:</div><div class="tags" style="margin-top:4px">';
+        layout.maxWidths.forEach(function(w) { html += '<span class="tag">' + escapeHtml(w) + '</span>'; });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function buildStructureHTML(structure) {
+      var html = '';
+      var headingEntries = Object.entries(structure.headings);
+      if (headingEntries.length > 0) {
+        html += '<div class="label" style="margin-bottom:6px">Headings</div>';
+        headingEntries.forEach(function(entry) {
+          var tag = entry[0], info = entry[1];
+          html += '<div class="list-item"><div class="value">&lt;' + tag + '&gt; × ' + info.count + '</div>' + (info.samples.length ? '<div class="label">' + escapeHtml(info.samples.join(' · ').substring(0, 100)) + '</div>' : '') + '</div>';
+        });
+      }
+      html += '<div style="margin-top:10px"><div class="label">Semantic elements</div><div class="tags" style="margin-top:6px">';
+      Object.entries(structure.semantic).forEach(function(entry) { if (entry[1] > 0) html += '<span class="tag">&lt;' + entry[0] + '&gt; × ' + entry[1] + '</span>'; });
+      html += '</div></div>';
+      html += '<div style="margin-top:10px">';
+      html += '<div class="stat-row"><span class="stat-label">Links</span><span class="stat-value">' + structure.links.total + ' (' + structure.links.external + ' ext)</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Forms</span><span class="stat-value">' + structure.forms.total + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Tables</span><span class="stat-value">' + structure.tables + '</span></div>';
+      if (structure.media.video > 0) html += '<div class="stat-row"><span class="stat-label">Videos</span><span class="stat-value">' + structure.media.video + '</span></div>';
+      html += '</div>';
+      return html;
+    }
+
+    function buildImagesHTML(images) {
+      var html = '<div class="stat-row"><span class="stat-label">Total images</span><span class="stat-value">' + images.totalImages + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Lazy loaded</span><span class="stat-value">' + images.lazyLoaded + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">With srcset</span><span class="stat-value">' + images.withSrcset + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Inline SVGs</span><span class="stat-value">' + images.inlineSVGs + '</span></div>';
+      if (images.backgroundImages.length > 0) {
+        html += '<div style="margin-top:8px"><div class="label">Background images</div><div class="scroll-list">';
+        images.backgroundImages.slice(0, 5).forEach(function(bg) { html += '<div class="list-item"><div class="value" style="font-size:0.8rem;font-family:monospace">' + escapeHtml(bg.substring(0, 80)) + '</div></div>'; });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function buildResponsiveHTML(resp) {
+      var html = '<div class="stat-row"><span class="stat-label">Viewport meta</span><span class="stat-value">' + (resp.hasViewportMeta ? '✅ Yes' : '❌ No') + '</span></div>';
+      if (resp.viewportContent) html += '<div class="list-item"><div class="label">Viewport</div><div class="value" style="font-family:monospace;font-size:0.82rem">' + escapeHtml(resp.viewportContent) + '</div></div>';
+      html += '<div class="stat-row"><span class="stat-label">Media queries</span><span class="stat-value">' + resp.mediaQueryCount + '</span></div>';
+      if (resp.breakpoints.length > 0) {
+        html += '<div style="margin-top:8px"><div class="label">Breakpoints</div><div class="tags" style="margin-top:6px">';
+        resp.breakpoints.forEach(function(bp) { html += '<span class="tag">' + escapeHtml(bp) + '</span>'; });
+        html += '</div></div>';
+      }
+      return html;
+    }
+
+    function buildIconsHTML(icons) {
+      var html = '<div class="stat-row"><span class="stat-label">Icon font classes</span><span class="stat-value">' + icons.iconFontClasses + '</span></div>';
+      html += '<div class="stat-row"><span class="stat-label">Inline SVGs</span><span class="stat-value">' + icons.inlineSVGs + '</span></div>';
+      if (icons.icons.length > 0) {
+        html += '<div style="margin-top:8px"><div class="label">Icons found</div>';
+        icons.icons.forEach(function(ic) { html += '<div class="list-item"><div class="value">' + escapeHtml(ic.type) + (ic.sizes ? ' (' + ic.sizes + ')' : '') + '</div></div>'; });
+        html += '</div>';
+      }
+      return html;
+    }
+
+    function buildShadowsHTML(shadows) {
+      var html = '<div class="scroll-list">';
+      shadows.forEach(function(s) { html += '<div class="list-item"><div class="value" style="font-family:monospace;font-size:0.82rem">' + escapeHtml(s) + '</div></div>'; });
+      html += '</div>';
+      return html;
+    }
+
+    function buildGradientsHTML(gradients) {
+      var html = '';
+      gradients.forEach(function(g) {
+        html += '<div style="margin-bottom:8px"><div style="height:32px;border-radius:8px;background:' + g + ';border:1px solid var(--border)"></div><div class="label" style="font-family:monospace;font-size:0.75rem;margin-top:3px;word-break:break-all">' + escapeHtml(g) + '</div></div>';
+      });
+      return html;
+    }
+
+    function buildMetaHTML(meta) {
+      var html = '';
+      if (meta.description) html += '<div class="list-item"><div class="label">Description</div><div class="value">' + escapeHtml(meta.description) + '</div></div>';
+      if (meta.keywords) html += '<div class="list-item"><div class="label">Keywords</div><div class="value">' + escapeHtml(meta.keywords) + '</div></div>';
+      if (meta.author) html += '<div class="list-item"><div class="label">Author</div><div class="value">' + escapeHtml(meta.author) + '</div></div>';
+      if (meta.charset) html += '<div class="stat-row"><span class="stat-label">Charset</span><span class="stat-value">' + escapeHtml(meta.charset) + '</span></div>';
+      if (meta.ogTitle) html += '<div class="list-item"><div class="label">OG Title</div><div class="value">' + escapeHtml(meta.ogTitle) + '</div></div>';
+      if (meta.favicon) html += '<div class="list-item"><div class="label">Favicon</div><div class="value">' + escapeHtml(meta.favicon) + '</div></div>';
+      if (!html) html = '<p style="color:var(--text-dim)">No meta information found</p>';
+      return html;
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      var div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
